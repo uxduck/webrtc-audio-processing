@@ -355,8 +355,18 @@ fn main() -> Result<()> {
     let (include_dirs, lib_dirs) = webrtc::get_build_paths()?;
 
     // Prefix defined symbols in the webrtc library (bundled builds only)
-    // Returns the list of renamed symbols to update wrapper references later
-    let renamed_symbols = webrtc::prefix_library_symbols(&lib_dirs, SYMBOL_PREFIX)?;
+    // Returns the list of renamed symbols to update wrapper references later.
+    // Skipped on Windows: cc-rs writes both `lib<name>.a` and `<name>.lib` for
+    // the wrapper, but rust-objcopy only patches the `.a`. link.exe consumes
+    // the `.lib`, so the wrapper ends up with un-prefixed references against a
+    // prefixed webrtc archive and the link fails on `webrtc::*` symbols. The
+    // prefix exists for symbol-collision avoidance with other webrtc copies,
+    // not correctness, and a single-binary Tauri app doesn't need it.
+    let renamed_symbols: Vec<String> = if cfg!(target_os = "windows") {
+        Vec::new()
+    } else {
+        webrtc::prefix_library_symbols(&lib_dirs, SYMBOL_PREFIX)?
+    };
 
     for dir in &lib_dirs {
         println!("cargo:rustc-link-search=native={}", dir.display());
@@ -412,9 +422,12 @@ fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=src/wrapper.cpp");
 
     // Prefix the wrapper library's references to webrtc symbols to match the renamed webrtc library.
-    let wrapper_lib = out_dir().join("libwebrtc_audio_processing_wrapper.a");
-    if wrapper_lib.exists() {
-        prefix_archive_symbols(&wrapper_lib, &renamed_symbols, SYMBOL_PREFIX)?;
+    // No-op on Windows for the same reason as the library-side prefix above.
+    if !cfg!(target_os = "windows") {
+        let wrapper_lib = out_dir().join("libwebrtc_audio_processing_wrapper.a");
+        if wrapper_lib.exists() {
+            prefix_archive_symbols(&wrapper_lib, &renamed_symbols, SYMBOL_PREFIX)?;
+        }
     }
 
     if cfg!(feature = "bundled") {
