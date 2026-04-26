@@ -418,8 +418,17 @@ fn main() -> Result<()> {
     }
 
     if cfg!(feature = "bundled") {
-        println!("cargo:rustc-link-lib=static={LIB_NAME}");
-        println!("cargo:rustc-link-lib=absl_strings");
+        // Meson produces Unix-style `lib<name>.a` archives even on MSVC. The
+        // default `static=<name>` form makes rustc tell link.exe to look for
+        // `<name>.lib`, which doesn't exist; use `+verbatim` on Windows so the
+        // actual filename is searched for in the existing /LIBPATH dirs.
+        if cfg!(target_os = "windows") {
+            println!("cargo:rustc-link-lib=static:+verbatim=lib{LIB_NAME}.a");
+            println!("cargo:rustc-link-lib=static:+verbatim=libabsl_strings.a");
+        } else {
+            println!("cargo:rustc-link-lib=static={LIB_NAME}");
+            println!("cargo:rustc-link-lib=absl_strings");
+        }
     } else {
         println!("cargo:rustc-link-lib=dylib={LIB_NAME}");
     }
