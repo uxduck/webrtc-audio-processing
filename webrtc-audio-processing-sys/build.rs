@@ -476,7 +476,13 @@ fn determine_objcopy_path() -> Result<PathBuf> {
     // We use HOST because that is where the compiler (and tools) are running.
     let host = env::var("HOST").context("HOST env var not found")?;
 
-    let objcopy = sysroot.join("lib").join("rustlib").join(host).join("bin").join("rust-objcopy");
+    // Append the host's binary extension so the .exe is found on Windows. Without
+    // this, both `objcopy.exists()` and `Command::new(objcopy)` fail to locate
+    // rust-objcopy.exe even when llvm-tools is installed.
+    let mut objcopy = sysroot.join("lib").join("rustlib").join(host).join("bin").join("rust-objcopy");
+    if cfg!(target_os = "windows") {
+        objcopy.set_extension("exe");
+    }
 
     // Optional: verification
     if !objcopy.exists() {
