@@ -8,6 +8,7 @@ repository = "https://github.com/tonarino/webrtc-audio-processing"
 edition = "2018"
 keywords = ["ffi"]
 categories = ["multimedia::audio"]
+license = "BSD-3-Clause"
 license-file = "COPYING"
 
 [package.metadata.docs.rs]

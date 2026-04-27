@@ -10,6 +10,7 @@ links = "webrtc-audio-processing-2"
 build = "build.rs"
 keywords = ["ffi"]
 categories = ["multimedia::audio"]
+license = "BSD-3-Clause"
 license-file = "COPYING"
 
 [package.metadata.docs.rs]
