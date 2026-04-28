@@ -1,8 +1,9 @@
 use anyhow::{bail, Context, Result};
 use bindgen::callbacks::{AttributeInfo, DeriveInfo, ParseCallbacks};
+use fs2::FileExt;
 use std::{
     env,
-    fs::File,
+    fs::{File, OpenOptions},
     io::{BufWriter, Write},
     path::PathBuf,
     process::Command,
@@ -20,6 +21,27 @@ const SYMBOL_PREFIX: &str = "v2_";
 
 fn out_dir() -> PathBuf {
     std::env::var("OUT_DIR").expect("OUT_DIR environment var not set.").into()
+}
+
+struct BuildScriptLock {
+    _file: File,
+}
+
+impl BuildScriptLock {
+    fn acquire() -> Result<Self> {
+        let lock_path = out_dir().join("webrtc-audio-processing-sys.lock");
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(&lock_path)
+            .with_context(|| format!("Failed to open build lock {}", lock_path.display()))?;
+
+        file.lock_exclusive()
+            .with_context(|| format!("Failed to lock build directory {}", out_dir().display()))?;
+
+        Ok(Self { _file: file })
+    }
 }
 
 /// Prefix specified symbols in a static library using objcopy --redefine-sym.
@@ -351,6 +373,11 @@ impl ParseCallbacks for CustomDeriveCallbacks {
 }
 
 fn main() -> Result<()> {
+    // Overlapping Cargo invocations can execute this build script against the
+    // same OUT_DIR. Meson exits instead of waiting on its own lock, so guard all
+    // generated native artifacts here.
+    let _build_lock = BuildScriptLock::acquire()?;
+
     webrtc::build_if_necessary()?;
     let (include_dirs, lib_dirs) = webrtc::get_build_paths()?;
 
