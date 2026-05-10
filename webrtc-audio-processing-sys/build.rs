@@ -196,7 +196,9 @@ mod webrtc {
             // Otherwise use the local build fetched and built by meson.
             include_paths
                 .push(webrtc_source_dir().join("subprojects").join("abseil-cpp-20240722.0"));
-            lib_paths.push(webrtc_build_dir().join("subprojects").join("abseil-cpp-20240722.0"));
+            // `--layout=flat` emits subproject archives into meson-out instead
+            // of the mirrored subprojects/<name> build directory.
+            lib_paths.push(webrtc_build_dir().join("meson-out"));
         }
 
         Ok((include_paths, lib_paths))
@@ -232,6 +234,10 @@ mod webrtc {
 
         let mut meson = Command::new("meson");
         meson.arg("setup").arg("--prefix").arg(out_dir().as_os_str());
+        // Meson's default mirrored layout repeats source subdirectories in
+        // object/PDB paths, which can exceed Windows MSVC path limits under
+        // Cargo's generated target trees.
+        meson.arg("--layout=flat");
         meson.arg("--reconfigure");
 
         if cfg!(target_os = "macos") {
@@ -305,11 +311,14 @@ mod webrtc {
     }
 
     fn webrtc_source_dir() -> PathBuf {
-        out_dir().join("webrtc-audio-processing")
+        // Meson subprojects add long object paths under these generated dirs.
+        // Keep the names short so Windows MSVC builds stay below MAX_PATH-era
+        // limits even when Cargo's target dir is not especially shallow.
+        out_dir().join("wap-src")
     }
 
     fn webrtc_build_dir() -> PathBuf {
-        out_dir().join("webrtc-audio-processing-build")
+        out_dir().join("wap-build")
     }
 
     /// Extract defined (non-external) symbols from a static library using nm.
@@ -528,7 +537,8 @@ fn determine_objcopy_path() -> Result<PathBuf> {
     // Append the host's binary extension so the .exe is found on Windows. Without
     // this, both `objcopy.exists()` and `Command::new(objcopy)` fail to locate
     // rust-objcopy.exe even when llvm-tools is installed.
-    let mut objcopy = sysroot.join("lib").join("rustlib").join(host).join("bin").join("rust-objcopy");
+    let mut objcopy =
+        sysroot.join("lib").join("rustlib").join(host).join("bin").join("rust-objcopy");
     if cfg!(target_os = "windows") {
         objcopy.set_extension("exe");
     }
